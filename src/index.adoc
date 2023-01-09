@@ -158,8 +158,8 @@ Implementations must attempt to read chunks until the end of the file.
 If the first four bytes are not exactly the magic bytes implementations MUST abort.
 
 The checksum is the first four bytes of the <<SHA256>> hash of the concatenation
-of the chunk length and chunk contents fields. Implementations MUST abort reading if
-the checksum does not match.
+of the chunk type, chunk length and chunk contents fields. Implementations MUST
+abort reading if the checksum does not match.
 
 ==== Chunk Type
 The chunk type is either:
@@ -201,6 +201,11 @@ decoding.
 Most fields are of arbitrary length, so parsing the document must proceed in
 order; for example it is not possible to know the length of the column fields
 until the column metadata has been parsed.
+
+By implication, a document with no changes consists of `0x00 0x00 0x00 0x00`, as
+the counts of actors, heads, change columns and operations columns are all zero.
+With the chunk header, this gives a file consisting of the following bytes:
+`0x85 0x6f 0x4a 0x83 0xb8 0x1a 0x95 0x44 0x00 0x04 0x00 0x00 0x00 0x00`.
 
 [#change-chunks]
 ==== Change Chunk
@@ -306,7 +311,8 @@ can be represented as just one byte `0b01000000`, so should be rejected.
 ==== Change Hash
 
 A change hash is the 32-byte <<SHA256>> hash of the concatenation of the chunk
-length and chunk contents fields of a change represented as a <<Change Chunk,change chunk>>.
+type (0x01) chunk length and chunk contents fields of a change represented as a
+<<Change Chunk,change chunk>>.
 
 The first four bytes of the change hash are used as a checksum when a change
 chunk is serialized.
