@@ -17,11 +17,11 @@ This document describes the storage format used when serializing Automerge
 documents and changes for storage or transfer.
 
 We strongly encourage people to use a library based on the reference
-implementation https://github.com/Automerge/Automerge-rs[automerge-rs] (which is
+implementation https://github.com/automerge/automerge-rs[automerge-rs] (which is
 available as a
-https://github.com/Automerge/Automerge-rs/tree/main/rust/Automerge-c[C shared
+https://github.com/automerge/automerge-rs/tree/main/rust/automerge-c[C shared
 library] or a
-https://github.com/Automerge/Automerge-rs/tree/main/rust/Automerge-wasm[WebAssembly module] for ease of integration). That said, this document should let
+https://github.com/automerge/automerge-rs/tree/main/rust/automerge-wasm[WebAssembly module] for ease of integration). That said, this document should let
 you get started building your own, or at least understanding how Automerge
 works.
 
@@ -360,9 +360,9 @@ Column specifications are a 32-bit <<uLEB>> interpreted as a bitfield:
 If the deflate bit is set then the column data must first be decompressed using
 DEFLATE before proceeding with decoding the values.
 
-The DEFLATE bit is only permitted in <<Document Chunks,document chunks>>,
-implementations must abort if they find compressed columns in <<Change
-Chunks,change chunks>>.
+The DEFLATE bit is only permitted in <<Document Chunk,document chunks>>,
+implementations must abort if they find compressed columns in
+<<change-chunks,change chunks>>.
 
 The ID defines the purpose of the column for either <<Change Columns>> or
 <<Operation Columns>>, and implementations must preserve columns that they do
@@ -459,7 +459,7 @@ differently they may have vastly different byte counts.
 For future compatibility it is important that programs which edit Automerge
 documents maintain all columns, even those that they don't understand the
 meaning of. When new changes or operations are added to a document with an
-<<Unknown Columns,unknown column>> a null should be added following the encoding
+<<unknown-columns,unknown column>> a null should be added following the encoding
 rules of its <<Column Specification,specification>>.
 
 ==== Change Columns
@@ -503,8 +503,8 @@ following fields:
 
 | actor ID | array of bytes | The id of the actor that made the change
 | seq | 64-bit uint | The sequence number of the change
-| ops | array of <<Operations,operations>> | The operations for this change (take all operations with counter greater the previous change's maxOp and less than or equal to this change's maxOp)
-| deps | array of <<Changes,changes>> | The changes this change depends on (look up each index in the dependencies index in this documents changes columns)
+| ops | array of <<Operation, operations>> | The operations for this change (take all operations with counter greater the previous change's maxOp and less than or equal to this change's maxOp)
+| deps | array of <<Change, changes>> | The changes this change depends on (look up each index in the dependencies index in this documents changes columns)
 | time | 64-bit int | The (optional) wallclock time of the change
 | message | utf-8 string | The (optional) message of the change
 | extra data | any | The (optional) extra data (parse the extra data column according to the extra metadata column)
@@ -529,10 +529,10 @@ The currently defined columns for operations are:
 | action | 66 | 4 | <<uLEB Column>> | The <<Action>> of each operation
 | value metadata | 86 | 5 | <<Value Metadata Column>> | The metadata for the value of this operation
 | value | 87 | 5 | <<Value Column>> | The value of this operation
-| predecessor group | 112 | 6 |<<Group Column>> | The group for the predecessors of this operation (only in <<Change Chunks,change chunks>>)
+| predecessor group | 112 | 6 |<<Group Column>> | The group for the predecessors of this operation (only in <<change-chunks,change chunks>>)
 | predecessor actor IDs |113 | 6 | Grouped <<Actor Column>> | The actor ID of each predecessor's operation ID
 | predecessor counters |115 | 6 | Grouped <<Delta Column>> | The counter of each predecessor's operation ID
-| successor group | 128 | 8 | <<Group Column>> | The group for the successors of this operation (only in <<Document Chunks,document chunks>>)
+| successor group | 128 | 8 | <<Group Column>> | The group for the successors of this operation (only in <<Document Chunk,document chunks>>)
 | successor actor IDs | 129 | 8 | Grouped <<Actor Column>> | The actor ID of each successor's operation ID
 | successor counters | 131 | 8 | Grouped <<Delta Column>> | The counter of each successor's operation ID
 |===
@@ -546,9 +546,9 @@ We determine the key that the operation refers to thusly:
 * Otherwise we use the pair (lookup_actor(key actor ID), key counter) as the key of the operation (when modifying a <<Object,list>>).
 * If key string is null and any of key actor or key counter are null implementations MUST abort
 
-Operations are stored with their predecessors in <<Change Chunks,change chunks>> and with successors
-in <<Document Chunks, document chunks>>. For more information see the section
-on <<Implementation Concerns,implementation concerns>>.
+Operations are stored with their predecessors in <<change-chunks,change chunks>> and with successors
+in <<Document Chunk, document chunks>>. For more information see the section
+on <<Implementation concerns,implementation concerns>>.
 
 After decoding all the columns, and de-referencing indices into other columns,
 you will have an array of operations, where each operation conceptually has the
@@ -595,11 +595,11 @@ example of this is the dependencies index of a <<Change Columns,change>>. The
 group column (denoted by column type 0) defines how many values should be read from each grouped column
 when parsing each change or operation.
 
-Grouping affects all columns with the same ID as its <<Column
-Specification,column specification>>, so a group column will always be followed
-by one or more columns with the same id but different types.  Implementations
-MUST abort if a group column specification without a following column
-specification of the same ID is encountered.
+Grouping affects all columns with the same ID as its <<Column Specification,column specification>>,
+so a group column will always be followed by one or more columns with the same
+id but different types.  Implementations MUST abort if a group column
+specification without a following column specification of the same ID is
+encountered.
 
 The group column is a <<Run Length Encoding,run length encoded>> list of 64-bit
 <<uLEB>>s that specifies how many items should be read from the subsequent
@@ -675,9 +675,9 @@ you would end up with `0x7e 0x01 0x65 0x00 0x00 0x01 0x02 0x03 0x66 0x6f 0x6f`.
 ==== Value Metadata Column
 
 The value metadata column (denoted by column type 6) is always paired with a
-<<Value Column,value column>> with the same ID. The metadata column is a <<Run
-Length Encoding, run length encoded>> list of 64-bit <<LEB>>s that defines the
-type and length of each value in the value column.
+<<Value Column,value column>> with the same ID. The metadata column is a <<Run Length Encoding, run length encoded>>
+list of 64-bit <<LEB>>s that defines the type and length of each value in the
+value column.
 
 These integers are laid out like so:
 
@@ -722,9 +722,9 @@ this. I _think_ it's what the javascript implementation does though.
 
 ==== Value Column
 
-The value column (denoted by column type 7) contains raw <<Values,values>>. The
-type and length of each value in the column is determined by the <<Value
-Metadata Column,value metadata column>> with the same column ID.
+The value column (denoted by column type 7) contains raw <<Value,values>>. The
+type and length of each value in the column is determined by the <<Value Metadata Column,value metadata column>>
+with the same column ID.
 
 Note that raw value columns which do not contain values may be omitted. If
 implementations encounter a lone value metadata column they must assume that it
@@ -768,7 +768,7 @@ are not inthis order?
 
 * First sort by object ID, such that any operations for the same object are
   consecutive. The null objectId (i.e. the root object) is sorted before all
-  non-null objectIds. Non-null objectIds are sorted by <<lamport-timestamp,
+  non-null objectIds. Non-null objectIds are sorted by <<Lamport Timestamps,
   Lamport timestamp>>.
 * For each object:
 ** if the object is a map, sort the operations within that object
@@ -857,10 +857,9 @@ Operation IDs are lamport timestamps. This imposes a total ordering. To compare 
 The dependencies in the document model are expressed as integer offsets. But in
 the reference data model dependencies are expressed as a hash of the ancestor
 changes. To map to the hash based representation perform a topological traversal
-of the dependency graph and for each change serialize the change as a <<Change
-Chunk>> then calculate the hash of the change as in the <<Change Hash>>, then
-for every change replace the index of the current change with the calculated
-hash.
+of the dependency graph and for each change serialize the change as a <<change-chunks, Change Chunk>>
+then calculate the hash of the change as in the <<Change Hash>>, then for every
+change replace the index of the current change with the calculated hash.
 
 Once this procedure is complete take the heads of the depedency graph and
 compare their hashes with the head hashes field in the document chunk. If the
