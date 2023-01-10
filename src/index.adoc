@@ -271,14 +271,16 @@ first bit.  Take the latter 7 bits from each byte (the last byte contains the
 most significant bits, so you need to concatenate them in the opposite order to
 which the bytes are represented on disk).
 
-Although uLEB encoding can support numbers of arbitrary bitsize, fields in
-Automerge are size limited to 32 or 64 bits. Implementations should fail to
-parse documents that contain overly large encoded integers in fields.
+Although uLEB encoding can support numbers of arbitrary bitsize, unsigned
+integers in Automerge must not exceed 64 bits. Implementations should fail to
+parse documents with uLEBs that decode to a value too large to be represented in
+a 64-bit unsigned integer.
 
-Implementations must not generate overly long LEB encodings, and should reject
-documents with overly long encodings. For example using the decoding rules above
-the bytes `0b10000000 0b00000000` would be decoded as 0; but this is overly
-long: 0 can be represented in just one byte as `0b00000000`, so should be rejected.
+Implementations must generate the shortest possible uLEB encodings, and should
+reject documents with overly long encodings. For example using the decoding
+rules above the bytes `0b10000000 0b00000000` would be decoded as 0; but this is
+overly long: 0 can be represented in just one byte as `0b00000000`, so should be
+rejected.
 
 ==== LEB
 
@@ -303,10 +305,16 @@ which the bytes are represented on disk). If the first bit of your number is 1
 number and you can take twos complement to get to its absolute value; otherwise
 you have a positive number (or 0).
 
-Implementations must not generate overly long LEB encodings, and should reject
-documents with overly long encodings.  For example the decoding rules above the
-bytes `0b11111111 0b01111111` would be decoded as -1; but this is overly long: -1
-can be represented as just one byte `0b01000000`, so should be rejected.
+Although LEB encoding can support numbers of arbitrary bitsize, signed
+integers in Automerge must not exceed 64 bits. Implementations should fail to
+parse documents with uLEBs that decode to a value too large to be represented in
+a 64-bit signed integer.
+
+Implementations must generate the shortest possible LEB for a given integer, and
+should reject documents with overly long encodings.  For example the decoding
+rules above the bytes `0b11111111 0b01111111` would be decoded as -1; but this
+is overly long: -1 can be represented as just one byte `0b01000000`, so should
+be rejected.
 
 ==== Change Hash
 
@@ -427,7 +435,9 @@ every change hash.
 
 ==== Column Metadata
 
-The column metadata consists of a 64-bit <<uLEB>> N giving the number of columns, followed by N pairs describing each columns
+The column metadata consists of a 64-bit <<uLEB>> N giving the number of
+columns, followed by N pairs describing each columns in the chunks <<Column
+Data, column data>>.
 
 |===
 | Field | Description
@@ -441,10 +451,13 @@ The column specifications must be unique and sorted. Implementations must not
 include both an uncompressed and a compressed column with the same ID and type,
 and the column order should be sorted with the deflate bit set to 0.
 
-A length of 0 indicates that every value in the column is null.
+A column that contains only null values, or is otherwise empty, should be
+omitted from the chunk. In this case there will be no column specification in
+the column metadata and no data in the column data.
 
-WARNING: Is this true? It seems like fully null columns are just omitted from
-the metadata
+In the case that there are no changes or operations at all, then the column
+metadata will be encoded as `0x00` to indicate that there are no columns at all,
+and there will be no column data in the chunk.
 
 === Column Data
 
@@ -557,7 +570,7 @@ following fields:
 |===
 | Field | Type | Mapping to columns
 | Object | Object ID | The object modified by this operation in (column 0)
-| Key | String or Object ID | The position in that object to modify (column 1)
+| Key | String or Operation ID | The position in that object to modify (column 1)
 | ID | Operation ID | The ID of this operation, and thus the object ID of any <<Object,object>> it creates (column 2)
 | Insert | boolean | For operations on `list` or `text` objects, whether to overwrite the position (when `false`) or insert before the position (when `true`)
 | <<Action>> | action | The action this operation takes
@@ -595,11 +608,11 @@ example of this is the dependencies index of a <<Change Columns,change>>. The
 group column (denoted by column type 0) defines how many values should be read from each grouped column
 when parsing each change or operation.
 
-Grouping affects all columns with the same ID as its <<Column Specification,column specification>>,
-so a group column will always be followed by one or more columns with the same
-id but different types.  Implementations MUST abort if a group column
-specification without a following column specification of the same ID is
-encountered.
+Grouping affects all columns with the same ID as its <<Column
+Specification,column specification>>, so a group column will usually be followed
+by one or more columns with the same id but different types. It is possible to
+have a group column with no matching grouped columns if the grouped column is
+completely empty, as it will be omitted.
 
 The group column is a <<Run Length Encoding,run length encoded>> list of 64-bit
 <<uLEB>>s that specifies how many items should be read from the subsequent
@@ -751,14 +764,16 @@ recognise for the new rows they are inserting.
 
 WARNING: What should the null value be for boolean or delta columns?
 
-=== Implementation concerns
+== Implementation concerns
 
 Below are some notes that may help implementors build compatible automerge
 implementations. They are likely not yet complete, and any differences between
 what is written here and the https://github.com/Automerge/Automerge-rs[reference implementation]
 should be resolved in favor of that.
 
-==== Order of operations
+=== Operations in document chunks
+
+==== Ordering of operations
 
 Operations are grouped by the object that they manipulate. Objects are then
 sorted by their IDs. Thus operations are ordered using the following procedure:
@@ -809,7 +824,7 @@ the data to be deleted.
 Implementations MUST abort if they encounter explicitly encoded delete
 operations in a document chunk.
 
-==== Operations in Document Chunks
+==== Calculating predecessors
 
 Operations in the document format are not stored in the order they were
 generated, as they are in the change data model. Furthermore, operations in the
@@ -844,7 +859,7 @@ Implementations MUST abort if no matching change is found
 For each change sort the operations within the change by
 <<Lamport Timestamps, lamport timestamp>> of the operation ID.
 
-==== Lamport Timestamps
+=== Lamport Timestamps
 
 Operation IDs are lamport timestamps. This imposes a total ordering. To compare two lamport timestamps:
 
@@ -852,7 +867,7 @@ Operation IDs are lamport timestamps. This imposes a total ordering. To compare 
 * If the counter components are the same but the actor IDs are different then the actor ID which is lexicographically larger is considered the larger timestamp
 * Otherwise the two timestamps are equal
 
-==== Hash verification
+=== Hash verification
 
 The dependencies in the document model are expressed as integer offsets. But in
 the reference data model dependencies are expressed as a hash of the ancestor
