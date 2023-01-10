@@ -69,7 +69,7 @@ A change is identified by its <<Change Hash,change hash>> which is the
 
 === Actor
 
-An actor makes applies a linear sequence of <<Operations,operations>> to a <<Document,document>>
+An actor makes applies a linear sequence of <<Operation,operations>> to a <<Document,document>>
 and commits them in a sequence of <<Change,changes>>. Each actor has an actor ID that
 uniquely identifies it. An actor ID is an arbitrary sequence of bytes, which
 should be generated in a way that will not collide with other actors (the reference
@@ -436,8 +436,7 @@ every change hash.
 ==== Column Metadata
 
 The column metadata consists of a 64-bit <<uLEB>> N giving the number of
-columns, followed by N pairs describing each columns in the chunks <<Column
-Data, column data>>.
+columns, followed by N pairs describing each columns in the chunks <<Column Data, column data>>.
 
 |===
 | Field | Description
@@ -608,11 +607,11 @@ example of this is the dependencies index of a <<Change Columns,change>>. The
 group column (denoted by column type 0) defines how many values should be read from each grouped column
 when parsing each change or operation.
 
-Grouping affects all columns with the same ID as its <<Column
-Specification,column specification>>, so a group column will usually be followed
-by one or more columns with the same id but different types. It is possible to
-have a group column with no matching grouped columns if the grouped column is
-completely empty, as it will be omitted.
+Grouping affects all columns with the same ID as its <<Column Specification,column specification>>,
+so a group column will usually be followed by one or more columns with the same
+id but different types. It is possible to have a group column with no matching
+grouped columns if the grouped column is completely empty, as it will be
+omitted.
 
 The group column is a <<Run Length Encoding,run length encoded>> list of 64-bit
 <<uLEB>>s that specifies how many items should be read from the subsequent
