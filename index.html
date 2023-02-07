@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 2.0.16">
+<meta name="author" content="Alex Good, Andrew Jeffery">
+<title>Binary Document Format</title>
+<style>
+/* Asciidoctor default stylesheet | MIT License | https://asciidoctor.org */
+
+@import url("https://fonts.googleapis.com/css?family=Source+Code+Pro");
+@import url(https://cdn.jsdelivr.net/gh/asciidoctor/asciidoctor@2.0/data/stylesheets/asciidoctor-default.css); /* Default asciidoc style framework - important */
+
+/* CUSTOMISATIONS */
+/* Change the values in root for quick customisation. If you want even more fine grain... venture further. */
+
+:root{
+--maincolor:#FFFFFF;
+--primarycolor:#000000;
+--secondarycolor:#000000;
+--tertiarycolor: #000000;
+--sidebarbackground:#CCC;
+--linkcolor:#000000;
+--linkcoloralternate:#f44336;
+--white:#FFFFFF;
+--black:#000000;
+}
+
+body{font-family: "Source Code Pro",sans-serif;}
+
+/* Text styles */
+h1{color:var(--primarycolor) !important; font-family: "Source Code Pro",sans-serif;}
+h2,h3,h4,h5,h6{color:var(--secondarycolor) !important; font-family: "Source Code Pro",sans-serif;}
+.title{color:var(--tertiarycolor) !important; font-family:"Source Code Pro",sans-serif !important;font-style: normal !important; font-weight: normal !important;}
+
+/* Sidebar */
+#toctitle{font-family: "Source Code Pro",sans-serif;}
+.sectlevel1{font-family: "Source Code Pro",sans-serif!important;}
+.sectlevel2{font-family: "Source Code Pro",sans-serif!important;}
+
+/* Responsiveness fixes */
+video {
+  max-width: 100%;
+}
+
+@media all and (max-width: 600px) {
+table {
+  /*width: 55vw!important;*/
+  font-size: 3vw;
+}
+
+
+</style>
+</head>
+<body class="article">
+<div id="header">
+<h1>Binary Document Format</h1>
+<div class="details">
+<span id="author" class="author">Alex Good</span><br>
+<span id="email" class="email"><a href="mailto:alex@memoryandthought.me">alex@memoryandthought.me</a></span><br>
+<span id="author2" class="author">Andrew Jeffery</span><br>
+<span id="email2" class="email"><a href="mailto:andrewjeffery97@gmail.com">andrewjeffery97@gmail.com</a></span><br>
+<br><span id="revremark">draft</span>
+</div>
+<div id="toc" class="toc">
+<div id="toctitle">Table of Contents</div>
+<ul class="sectlevel1">
+<li><a href="#_introduction">Introduction</a></li>
+<li><a href="#_terminology_and_conventions">Terminology and Conventions</a></li>
+<li><a href="#_concepts">Concepts</a>
+<ul class="sectlevel2">
+<li><a href="#_document">Document</a></li>
+<li><a href="#_change">Change</a></li>
+<li><a href="#_actor">Actor</a></li>
+<li><a href="#_operation">Operation</a></li>
+<li><a href="#_object">Object</a></li>
+<li><a href="#_value">Value</a></li>
+</ul>
+</li>
+<li><a href="#_file_structure">File structure</a>
+<ul class="sectlevel2">
+<li><a href="#chunk-containers">Chunks</a>
+<ul class="sectlevel3">
+<li><a href="#_chunk_type">Chunk Type</a></li>
+<li><a href="#document-chunks">Document Chunk</a></li>
+<li><a href="#change-chunks">Change Chunk</a></li>
+<li><a href="#compressed-chunks">Compressed Change Chunk</a></li>
+</ul>
+</li>
+<li><a href="#_simple_types">Simple types</a>
+<ul class="sectlevel3">
+<li><a href="#_uleb">uLEB</a></li>
+<li><a href="#_leb">LEB</a></li>
+<li><a href="#_change_hash">Change Hash</a></li>
+<li><a href="#_action">Action</a></li>
+<li><a href="#_column_specification">Column Specification</a></li>
+</ul>
+</li>
+<li><a href="#_compound_types">Compound types</a>
+<ul class="sectlevel3">
+<li><a href="#_array_of_actor_ids">Array of Actor IDs</a></li>
+<li><a href="#_array_of_change_hashes">Array of Change Hashes</a></li>
+<li><a href="#_heads_index">Heads Index</a></li>
+<li><a href="#_column_metadata">Column Metadata</a></li>
+</ul>
+</li>
+<li><a href="#_column_data">Column Data</a>
+<ul class="sectlevel3">
+<li><a href="#_change_columns">Change Columns</a></li>
+<li><a href="#_operation_columns">Operation Columns</a></li>
+</ul>
+</li>
+<li><a href="#_column_types">Column Types</a>
+<ul class="sectlevel3">
+<li><a href="#_run_length_encoding">Run Length Encoding</a></li>
+<li><a href="#group-columns">Group Column</a></li>
+<li><a href="#actor-index-columns">Actor Column</a></li>
+<li><a href="#_uleb_column">uLEB Column</a></li>
+<li><a href="#_delta_column">Delta Column</a></li>
+<li><a href="#_boolean_column">Boolean Column</a></li>
+<li><a href="#_string_column">String Column</a></li>
+<li><a href="#raw-value-columns">Value Metadata Column</a></li>
+<li><a href="#_value_column">Value Column</a></li>
+<li><a href="#unknown-columns">Unknown columns</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#_implementation_concerns">Implementation concerns</a>
+<ul class="sectlevel2">
+<li><a href="#_operations_in_document_chunks">Operations in document chunks</a>
+<ul class="sectlevel3">
+<li><a href="#_ordering_of_operations">Ordering of operations</a></li>
+<li><a href="#_successors_and_omitting_deletes">Successors and omitting deletes</a></li>
+<li><a href="#_calculating_predecessors">Calculating predecessors</a></li>
+</ul>
+</li>
+<li><a href="#_lamport_timestamps">Lamport Timestamps</a></li>
+<li><a href="#_hash_verification">Hash verification</a></li>
+</ul>
+</li>
+<li><a href="#_references">References</a></li>
+</ul>
+</div>
+</div>
+<div id="content">
+<div class="sect1">
+<h2 id="_introduction">Introduction</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Automerge is a library that allows people to collaboratively work together
+without a central co-ordination or a reliable connection.  It is a specific
+implementation of of a conflict-free replicated data type (or
+<a href="https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type">CRDT</a>).</p>
+</div>
+<div class="paragraph">
+<p>This document describes the storage format used when serializing Automerge
+documents and changes for storage or transfer.</p>
+</div>
+<div class="paragraph">
+<p>We strongly encourage people to use a library based on the reference
+implementation <a href="https://github.com/automerge/automerge-rs">automerge-rs</a> (which is
+available as a
+<a href="https://github.com/automerge/automerge-rs/tree/main/rust/automerge-c">C shared
+library</a> or a
+<a href="https://github.com/automerge/automerge-rs/tree/main/rust/automerge-wasm">WebAssembly module</a> for ease of integration). That said, this document should let
+you get started building your own, or at least understanding how Automerge
+works.</p>
+</div>
+<div class="paragraph">
+<p>The storage format is designed for compactness and speed of parsing. Automerge
+stores the full history of changes to the document: this is a large amount of
+data but in practice it is very repetitive and amenable to compression.</p>
+</div>
+<div class="paragraph">
+<p>In addition to parsing the storage format, an Automerge library must resolve
+conflicts between concurrent operations in a consistent way. This document does
+not yet discuss how to do that (pull requests welcome :D), but the reference
+implementation should serve as a guide.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_terminology_and_conventions">Terminology and Conventions</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The key words &#8220;MUST&#8221;, &#8220;MUST NOT&#8221;, &#8220;REQUIRED&#8221;, &#8220;SHALL&#8221;, &#8220;SHALL NOT&#8221;,
+&#8220;SHOULD&#8221;, &#8220;SHOULD NOT&#8221;, &#8220;RECOMMENDED&#8221;, &#8220;NOT RECOMMENDED&#8221;, &#8220;MAY&#8221;, and
+&#8220;OPTIONAL&#8221; in this document are to be interpreted as described in <a href="#RFC2119">[RFC2119]</a>
+and <a href="#RFC8174">[RFC8174]</a> when, and only when, they appear in all capitals, as
+shown here.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_concepts">Concepts</h2>
+<div class="sectionbody">
+<div class="sect2">
+<h3 id="_document">Document</h3>
+<div class="paragraph">
+<p>An Automerge document is a collaboratively editable JSON-like structure. The
+serialized form of a document contains complete history of changes and
+operations that collaborators have applied.</p>
+</div>
+<div class="paragraph">
+<p>Automerge documents have a root value that is a map from string keys to arbitrary
+<a href="#_value">values</a>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_change">Change</h3>
+<div class="paragraph">
+<p>A change is a group of <a href="#_operation">operations</a> that modify a <a href="#_document">document</a>,
+analagous to a "commit" in a version control system like git.</p>
+</div>
+<div class="paragraph">
+<p>Each change is made by an <a href="#_actor">actor</a>, and has a (possibly empty) set of
+predecessor changes. Changes have an optional wall-clock timestamp, to keep
+track of when a change was committed, and an optional message to describe
+meaningful changes.</p>
+</div>
+<div class="paragraph">
+<p>A change is identified by its <a href="#_change_hash">change hash</a> which is the
+<a href="#SHA256">[SHA256]</a> hash of the binary representation of the change.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_actor">Actor</h3>
+<div class="paragraph">
+<p>An actor makes applies a linear sequence of <a href="#_operation">operations</a> to a <a href="#_document">document</a>
+and commits them in a sequence of <a href="#_change">changes</a>. Each actor has an actor ID that
+uniquely identifies it. An actor ID is an arbitrary sequence of bytes, which
+should be generated in a way that will not collide with other actors (the reference
+library generates 128-bit random identifiers).</p>
+</div>
+<div class="paragraph">
+<p>There is a small amount of per-actor overhead, so if you have one process that
+edits a document several times sequentially, it is preferrable to re-use the
+same actor ID for each change.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_operation">Operation</h3>
+<div class="paragraph">
+<p>An operation is an individual mutation made by an <a href="#_actor">actor</a> to a <a href="#_document">document</a>.
+For example, setting a key to a value or inserting a character into some text.</p>
+</div>
+<div class="paragraph">
+<p>An operation has an <a href="#_action">action</a> which identifies what it does, and various
+fields depending on which action. For example a <code>"set"</code> operation has to
+identify the object being modified, the key in that object, and the new value.</p>
+</div>
+<div class="paragraph">
+<p>Each operation is identified by an operation ID. An operation ID is a pair
+of (<a href="#_actor">actor ID</a>, counter), where the counter is a unique always-incrementing
+value per actor.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_object">Object</h3>
+<div class="paragraph">
+<p>An object represents a collaboratively editable value in an Automerge document. There are three kinds
+of object:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>map</code> which maps string keys to <a href="#_value">values</a>,</p>
+</li>
+<li>
+<p><code>list</code> which is an ordered list of values</p>
+</li>
+<li>
+<p><code>text</code> which is a collaboratively editable utf-8 string.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Each object is created by an operation with an <code>action</code> of <code>"makeMap"</code>,
+<code>"makeList"</code> or <code>"makeText"</code>, and is identified by its object ID. The object ID
+is the <a href="#_operation">operation ID</a> of the operation that created the object.</p>
+</div>
+<div class="paragraph">
+<p>Each document has a root <code>map</code> which is identified by the object ID with a
+<code>null</code> actor id and <code>null</code> counter.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_value">Value</h3>
+<div class="paragraph">
+<p>Automerge objects are dynamically typed, and can contain any of the following kinds of value:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>map</code>, <code>list</code>, <code>text</code> – the collaboratively editable <a href="#_object">objects</a></p>
+</li>
+<li>
+<p><code>null</code> - an typed null</p>
+</li>
+<li>
+<p><code>bool</code> - either <code>true</code> or <code>false</code></p>
+</li>
+<li>
+<p><code>float</code> - a 64-bit IEEE754 float</p>
+</li>
+<li>
+<p><code>int</code> - a 64-bit signed int</p>
+</li>
+<li>
+<p><code>uint</code> – a 64-bit unsigned int</p>
+</li>
+<li>
+<p><code>string</code> - a utf-8 encoding string (possibly containing U+0000)</p>
+</li>
+<li>
+<p><code>bytes</code> - an arbitrary sequence of bytes</p>
+</li>
+<li>
+<p><code>timestamp</code> - a 64-bit signed integer representing milliseconds since the <a href="https://en.wikipedia.org/wiki/Unix_time">unix epoch</a></p>
+</li>
+<li>
+<p><code>counter</code> - a 64-bit signed intenger that collaborators increment or decrement (instead of overwriting)</p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_file_structure">File structure</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>An Automerge file consists of one or more length delimited chunks.
+Implementations must attempt to read chunks until the end of the file.</p>
+</div>
+<div class="sect2">
+<h3 id="chunk-containers">Chunks</h3>
+<div class="imageblock">
+<div class="content">
+<img src="chunk-container.svg" alt="chunk container" width="681" height="326">
+</div>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Byte Length</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Magic bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The sequence <code>[0x85, 0x6f, 0x4a, 0x83]</code></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Checksum</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Validates the integrity of the chunk</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_chunk_type">Chunk type</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The type of this chunk</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Chunk length</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Variable (64-bit <a href="#_uleb">uLEB</a>)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The length of the following chunk bytes</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Chunk contents</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Variable</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actual bytes for the chunk</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>If the first four bytes are not exactly the magic bytes implementations MUST abort.</p>
+</div>
+<div class="paragraph">
+<p>The checksum is the first four bytes of the <a href="#SHA256">[SHA256]</a> hash of the concatenation
+of the chunk type, chunk length and chunk contents fields. Implementations MUST
+abort reading if the checksum does not match.</p>
+</div>
+<div class="sect3">
+<h4 id="_chunk_type">Chunk Type</h4>
+<div class="paragraph">
+<p>The chunk type is either:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Value</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Type</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Description</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>0x00</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#document-chunks">Document chunk</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Contains a graph of related changes</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>0x01</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#change-chunks">Change chunk</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Contains a single change and its operations</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>0x02</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#compressed-chunks">Compressed change chunk</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Contains a single change deflate compressed</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect3">
+<h4 id="document-chunks">Document Chunk</h4>
+<div class="paragraph">
+<p>The fields in a document chunk, in order, are:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Actors</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_array_of_actor_ids">Array of Actor IDs</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actor IDs in sorted order</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Heads</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_array_of_change_hashes">Array of Change Hashes</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The hashes of the change graph in sorted order</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Change columns metadata</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_metadata">Column Metadata</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Description of the <a href="#_change_columns">change columns</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operation columns metadata</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_metadata">Column Metadata</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Description of the <a href="#_operation_columns">operation columns</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Change columns</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_data">Column Data</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actual bytes for the change columns</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operation columns</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_data">Column Data</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actual bytes for the operation columns</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Heads index</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_heads_index">Heads Index</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">A lookup from change hash to change</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>A document contains a set of changes that represent the history of a
+collaboratively edited document. A document always contains a complete history
+of changes: for each change in the document, all the changes that were made to
+the document before that change was made are also included.</p>
+</div>
+<div class="paragraph">
+<p>Document chunks use a columnar storage format for both changes and operations
+that assumes that the values of various fields are similar across adjacent
+changes and operations to optimize for high compression ratios and fast
+decoding.</p>
+</div>
+<div class="paragraph">
+<p>Most fields are of arbitrary length, so parsing the document must proceed in
+order; for example it is not possible to know the length of the column fields
+until the column metadata has been parsed.</p>
+</div>
+<div class="paragraph">
+<p>By implication, a document with no changes consists of <code>0x00 0x00 0x00 0x00</code>, as
+the counts of actors, heads, change columns and operations columns are all zero.
+With the chunk header, this gives a file consisting of the following bytes:
+<code>0x85 0x6f 0x4a 0x83 0xb8 0x1a 0x95 0x44 0x00 0x04 0x00 0x00 0x00 0x00</code>.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="change-chunks">Change Chunk</h4>
+<div class="paragraph">
+<p>The fields in a change chunk, in order, are:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Dependencies</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_array_of_change_hashes">Array of Change Hashes</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The set of changes that this change depends on</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Actor length</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The length of the actor ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Actor</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The <a href="#_actor">actor ID</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Sequence number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The sequence number</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Start op</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The counter of the first op in this change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Time</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_leb">LEB</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The time this change was created in milliseconds since the unix epoch</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Message length</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The length of the message in bytes</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Message</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UTF-8 encoded string</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The message associated with this change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Other actors</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_array_of_actor_ids">Array of Actor IDs</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Other actor IDs in this change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operation columns metadata</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_metadata">Column Metadata</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Description of the <a href="#_operation_columns">operation columns</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operation columns</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_column_data">Column Data</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actual bytes for the operation columns</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Extra bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">All data remaining in the chunk</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>A change chunk just contains a single change, its metadata and operations. It
+does not include any dependent changes, so you can only apply the change to a
+document that already contains those dependent changes.</p>
+</div>
+<div class="paragraph">
+<p>Change chunks use a columnar storage format that assumes that the values of
+various fields are similar across adjacent operations to optimize for high
+compression ratios and fast decoding.</p>
+</div>
+<div class="paragraph">
+<p>The extra bytes must be retained when processing changes. If future versions of
+automerge add new metadata to changes, this will allow old clients to
+collaborate with new clients without limiting which features the new clients can
+use.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="compressed-chunks">Compressed Change Chunk</h4>
+<div class="paragraph">
+<p>A compressed change chunk is a change chunk where the contents have been
+compressed using <a href="#DEFLATE">[DEFLATE]</a>. The checksum of a compressed chunk is calculated
+as through the chunk was not compressed (with type = 1, the length of the
+uncompressed data, and the original uncompressed data).</p>
+</div>
+<div class="paragraph">
+<p>For example if you have a change which has 372 bytes of data (excluding the header) which compresses to 323 bytes.
+If the original change chunk header consisted of the following bytes:
+<code>0x85 0x6f 0x4a 0x83 0x80 0xb7 0x5d 0x54 0x01 0xf4 0x02</code>,
+the compressed change chunk header would consist of:
+<code>0x85 0x6f 0x4a 0x83 0x80 0xb7 0x5d 0x54 0x02 0xc3 0x02</code></p>
+</div>
+<div class="paragraph">
+<p>To decode a compressed change chunk first decompress the chunk contents, and
+then construct a new chunk with the same magic bytes and checksum, but with type
+= 1 and the length of the decompressed data. Then parse that as a change chunk.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_simple_types">Simple types</h3>
+<div class="sect3">
+<h4 id="_uleb">uLEB</h4>
+<div class="paragraph">
+<p>uLEB is an unsigned <a href="https://en.wikipedia.org/wiki/LEB128">little endian base 128</a> value.
+This is a variable length encoding used throughout.</p>
+</div>
+<div class="paragraph">
+<p>To encode a uLEB, represent the number in binary and pad it with leading zeros
+so that it has a length which is a multiple of 7. Take each group of 7 bytes from
+least-significant to most-significant and output them in bytes - the first bit
+of every byte is 1 except for the last byte which is 0.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Unsigned ints 0 - 127 are stored as one byte: <code>0b00000000 - 0b01111111</code></p>
+</li>
+<li>
+<p>Unsigned ints 128 - 16383 are stored as two bytes: <code>0b10000000 0b00000001 - 0b11111111 0b01111111</code>
+etc.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>To decode a uLEB, read bytes up to and including the first byte with a 0 as the
+first bit.  Take the latter 7 bits from each byte (the last byte contains the
+most significant bits, so you need to concatenate them in the opposite order to
+which the bytes are represented on disk).</p>
+</div>
+<div class="paragraph">
+<p>Although uLEB encoding can support numbers of arbitrary bitsize, unsigned
+integers in Automerge must not exceed 64 bits. Implementations should fail to
+parse documents with uLEBs that decode to a value too large to be represented in
+a 64-bit unsigned integer.</p>
+</div>
+<div class="paragraph">
+<p>Implementations must generate the shortest possible uLEB encodings, and should
+reject documents with overly long encodings. For example using the decoding
+rules above the bytes <code>0b10000000 0b00000000</code> would be decoded as 0; but this is
+overly long: 0 can be represented in just one byte as <code>0b00000000</code>, so should be
+rejected.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_leb">LEB</h4>
+<div class="paragraph">
+<p>LEB is a signed variant <a href="https://en.wikipedia.org/wiki/LEB128">little endian base 128</a> value</p>
+</div>
+<div class="paragraph">
+<p>To encode a uLEB, represent the number in twos complement, and sign-extend it so
+that it has a length which is a multiple of seven. If the number is negative the padding will
+be of 1-bits and if the number is positive the padding will be 0-bits.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>0 is represented as one byte: <code>0b0000000</code></p>
+</li>
+<li>
+<p>Ints from 1 to 63 are represented as one byte: <code>0b00000001 - 0b00111111</code></p>
+</li>
+<li>
+<p>Ints from -1 to -64 are represented as one byte: <code>0b01111111 - 0b010000000</code></p>
+</li>
+<li>
+<p>Ints from 64 to 8191 are represented as two bytes: <code>0b11000000 0b00000000 - 0b11111111 0b00111111</code></p>
+</li>
+<li>
+<p>Ints from -65 to -8192 are represented as two bytes: <code>0b10111111 0b01111111 - 0b10000000 0b01000000</code>
+etc.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>To decode an LEB, read bytes up to and including the first byte with a 0 as the
+first bit.  Take the latter 7 bits from each byte (the last byte contains the
+most signfiicant bits, so you need to concatenate them in the opposite order to
+which the bytes are represented on disk). If the first bit of your number is 1
+(from the second bit of the last byte in encoded form) then you have a negative
+number and you can take twos complement to get to its absolute value; otherwise
+you have a positive number (or 0).</p>
+</div>
+<div class="paragraph">
+<p>Although LEB encoding can support numbers of arbitrary bitsize, signed
+integers in Automerge must not exceed 64 bits. Implementations should fail to
+parse documents with uLEBs that decode to a value too large to be represented in
+a 64-bit signed integer.</p>
+</div>
+<div class="paragraph">
+<p>Implementations must generate the shortest possible LEB for a given integer, and
+should reject documents with overly long encodings.  For example the decoding
+rules above the bytes <code>0b11111111 0b01111111</code> would be decoded as -1; but this
+is overly long: -1 can be represented as just one byte <code>0b01000000</code>, so should
+be rejected.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_change_hash">Change Hash</h4>
+<div class="paragraph">
+<p>A change hash is the 32-byte <a href="#SHA256">[SHA256]</a> hash of the concatenation of the chunk
+type (0x01) chunk length and chunk contents fields of a change represented as a
+<a href="#change-chunks">change chunk</a>.</p>
+</div>
+<div class="paragraph">
+<p>The first four bytes of the change hash are used as a checksum when a change
+chunk is serialized.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_action">Action</h4>
+<div class="paragraph">
+<p>The actions of the reference data model are encoded in the storage format as a
+byte as follows:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Byte</th>
+<th class="tableblock halign-left valign-top">Action</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x00</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>makeMap</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Creates a new map object</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x01</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>set</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Sets a key of a map, overwrites an item in a list, inserts an item in a list, or edits text</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x02</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>makeList</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Creates a new list object</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x03</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>del</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Unsets a key of a map, or removes an item from a list (reducing its length)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x04</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>makeText</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Creates a new text object</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0x05</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>inc</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Increments a counter stored in a map or a list</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>Future versions of automerge may add new actions, and implementations must
+preserve operations containing actions they don&#8217;t support when processing
+changes for forward compatibility.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_column_specification">Column Specification</h4>
+<div class="paragraph">
+<p>Column specifications are a 32-bit <a href="#_uleb">uLEB</a> interpreted as a bitfield:</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="column-id-layout.svg" alt="column id layout" width="1321" height="116">
+</div>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The least significant three bits encode the column type</p>
+</li>
+<li>
+<p>The 4th least significant bit is <code>1</code> if the column is <a href="#DEFLATE">[DEFLATE]</a> compressed and
+<code>0</code> otherwise</p>
+</li>
+<li>
+<p>The remaining bits are the column ID</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>If the deflate bit is set then the column data must first be decompressed using
+DEFLATE before proceeding with decoding the values.</p>
+</div>
+<div class="paragraph">
+<p>The DEFLATE bit is only permitted in <a href="#document-chunks">document chunks</a>,
+implementations must abort if they find compressed columns in
+<a href="#change-chunks">change chunks</a>.</p>
+</div>
+<div class="paragraph">
+<p>The ID defines the purpose of the column for either <a href="#_change_columns">Change Columns</a> or
+<a href="#_operation_columns">Operation Columns</a>, and implementations must preserve columns that they do
+not understand.</p>
+</div>
+<div class="paragraph">
+<p>The column type specifies how the data in the column is encoded. The possible
+types are:</p>
+</div>
+<table id="column-types-table" class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Value</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#group-columns">Group Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#actor-index-columns">Actor Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_uleb_column">uLEB Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">3</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_delta_column">Delta Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_boolean_column">Boolean Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_string_column">String Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">6</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#raw-value-columns">Value Metadata Column</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">7</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_value_column">Value Column</a></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_compound_types">Compound types</h3>
+<div class="sect3">
+<h4 id="_array_of_actor_ids">Array of Actor IDs</h4>
+<div class="paragraph">
+<p>The actor ID array consists of a 64-bit <a href="#_uleb">uLEB</a> giving the count of actor ids, followed by
+each actor ID as a length-prefixed byte array.</p>
+</div>
+<div class="paragraph">
+<p>Each item in the array consists of a 64-bit <a href="#_uleb">uLEB</a> giving the length in bytes,
+and then that number of bytes.</p>
+</div>
+<div class="paragraph">
+<p>For example an array consisting of the single actor ID <code>[0xab, 0xcd, 0xef]</code>
+would be encoded as: <code>0x01 0x03 0xab 0xcd 0xef</code>.</p>
+</div>
+<div class="paragraph">
+<p>Implementations must store actor ids lexicographically, and should error when
+reading a document with actor ids in the wrong order.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_array_of_change_hashes">Array of Change Hashes</h4>
+<div class="paragraph">
+<p>The heads array consists of a 64-bit <a href="#_uleb">uLEB</a> N giving the count of heads,
+followed by N <a href="#_change_hash">change hashes</a> each exactly 32-bytes long.</p>
+</div>
+<div class="paragraph">
+<p>For example an array consisting of the heads
+<code>f986a4318d1f1cc0e2e10e421e7a9a4cd0b70a89dae98bc1d76d789c2bf7904c</code> and
+<code>4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865</code> would be
+represented as <code>0x02 0xf9 0x86 ..{28 bytes elided).. 0x90 0x4c 0x43 0x55 ..{28 bytes elided}.. 0xd8 0x65</code></p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_heads_index">Heads Index</h4>
+<div class="paragraph">
+<p>The heads index provides a lookup table from the change hash to the change in a
+document. Very old automerge documents may be missing this field.</p>
+</div>
+<div class="paragraph">
+<p>The index consists of N 64-bit <a href="#_uleb">uLEB</a>'s (one per head in the Heads array of the
+<a href="#document-chunks">document chunk</a>), and each uLEB gives the index of that head&#8217;s change
+in the columnar change storage.</p>
+</div>
+<div class="paragraph">
+<p>In a well-formed document, the <a href="#_change_hash">change hash</a> of the change
+indicated will match the change hash in the heads array, but implementations may
+chose to not validate this when parsing documents to avoid having to recompute
+every change hash.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_column_metadata">Column Metadata</h4>
+<div class="paragraph">
+<p>The column metadata consists of a 64-bit <a href="#_uleb">uLEB</a> N giving the number of
+columns, followed by N pairs describing each columns in the chunks <a href="#_column_data">column data</a>.</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Column Specification</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">a 32-bit <a href="#_uleb">uLEB</a> encoded <a href="#_column_specification">Column Specification</a></p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Column Length</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a> of the length (in bytes) of the column data
+block</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>The column specifications must be unique and sorted. Implementations must not
+include both an uncompressed and a compressed column with the same ID and type,
+and the column order should be sorted with the deflate bit set to 0.</p>
+</div>
+<div class="paragraph">
+<p>A column that contains only null values, or is otherwise empty, should be
+omitted from the chunk. In this case there will be no column specification in
+the column metadata and no data in the column data.</p>
+</div>
+<div class="paragraph">
+<p>In the case that there are no changes or operations at all, then the column
+metadata will be encoded as <code>0x00</code> to indicate that there are no columns at all,
+and there will be no column data in the chunk.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_column_data">Column Data</h3>
+<div class="paragraph">
+<p>Columns are stored one after the other with no separators or length indicators.
+The columns are stored in order they appear in the <a href="#_column_metadata">column metadata</a>
+and each can be decoded according to its <a href="#_column_specification">column specification</a>.</p>
+</div>
+<div class="paragraph">
+<p>All columns must have the same number of items (or the same number of arrays of
+items for grouped columns), though as they are compressed
+differently they may have vastly different byte counts.</p>
+</div>
+<div class="paragraph">
+<p>For future compatibility it is important that programs which edit Automerge
+documents maintain all columns, even those that they don&#8217;t understand the
+meaning of. When new changes or operations are added to a document with an
+<a href="#unknown-columns">unknown column</a> a null should be added following the encoding
+rules of its <a href="#_column_specification">specification</a>.</p>
+</div>
+<div class="sect3">
+<h4 id="_change_columns">Change Columns</h4>
+<div class="paragraph">
+<p>The currently defined columns for changes in a <a href="#document-chunks">document chunk</a> are:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Name</th>
+<th class="tableblock halign-left valign-top">Specification</th>
+<th class="tableblock halign-left valign-top">ID</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">actor</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actor that made the change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">sequence number</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">3</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The sequence number for each change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">maxOp</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">19</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The largest counter that occurs in each change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">time</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">35</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The (optional) wallclock time at which each change was made</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">message</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">53</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_string_column">String Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The (optional) commit message for each change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">dependencies group</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#group-columns">Group Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The number of dependencies for each change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">dependencies index</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">67</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grouped <a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The indices of the changes this change depends on</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">extra metadata</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">86</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#raw-value-columns">Value Metadata Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The metadata for any extra data for this change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">extra data</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">87</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_value_column">Value Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Any extra data for this change</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>Each value in the <code>dependencies index</code> column is an index into the changes that
+are stored in the document&#8217;s columns.  Implementations MUST abort if an index is
+out of bounds.</p>
+</div>
+<div class="paragraph">
+<p>The <code>sequence number</code> of a change should be <code>1</code> if it is the first change by a
+given actor.  Each subsequent change must have a sequence number exactly <code>1</code>
+higher than the previous change by the same actor.  Implementations MUST abort
+if there are missing changes for a given actor ID.</p>
+</div>
+<div class="paragraph">
+<p>The <code>maxOp</code> field of the change refers to the largest counter component of an
+operation ID in the set of operations in this change. For a given actor ID this
+must always increase. Implementations MUST abort if the <code>maxOp</code> of a change is
+not larger than all the <code>maxOp</code> of changes from that actor with smaller <code>seq</code>.</p>
+</div>
+<div class="paragraph">
+<p>After decoding all the columns, and de-referencing indices into other columns,
+you will have an array of changes, where each change conceptually has the
+following fields:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Mapping</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">actor ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">array of bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The id of the actor that made the change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">seq</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit uint</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The sequence number of the change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ops</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">array of <a href="#_operation">operations</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The operations for this change (take all operations with counter greater the previous change&#8217;s maxOp and less than or equal to this change&#8217;s maxOp)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">deps</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">array of <a href="#_change">changes</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The changes this change depends on (look up each index in the dependencies index in this documents changes columns)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">time</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit int</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The (optional) wallclock time of the change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">message</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">utf-8 string</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The (optional) message of the change</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">extra data</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">any</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The (optional) extra data (parse the extra data column according to the extra metadata column)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="sect3">
+<h4 id="_operation_columns">Operation Columns</h4>
+<div class="paragraph">
+<p>The currently defined columns for operations are:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+<col style="width: 20%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Field</th>
+<th class="tableblock halign-left valign-top">Specification</th>
+<th class="tableblock halign-left valign-top">ID</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">object actor ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">actor index of object ID each operation targets</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">object counter</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_uleb_column">uLEB Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">counter of the object ID each operation targets</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">key actor ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">17</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">actor of the operation ID of the key of each operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">key counter</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">19</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_uleb_column">uLEB Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">counter of the operation ID of the key of each
+  operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">key string</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">21</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_string_column">String Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The string key each operation targets</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">actor ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">33</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actor of each operations ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">counter</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">35</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The counter of each operations ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">insert</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">52</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">3</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_boolean_column">Boolean Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Whether or not this is an insert operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">action</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">66</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_uleb_column">uLEB Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The <a href="#_action">Action</a> of each operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">value metadata</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">86</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#raw-value-columns">Value Metadata Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The metadata for the value of this operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">value</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">87</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_value_column">Value Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The value of this operation</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">predecessor group</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">112</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">6</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#group-columns">Group Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The group for the predecessors of this operation (only in <a href="#change-chunks">change chunks</a>)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">predecessor actor IDs</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">113</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">6</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grouped <a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actor ID of each predecessor&#8217;s operation ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">predecessor counters</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">115</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">6</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grouped <a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The counter of each predecessor&#8217;s operation ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">successor group</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">128</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">8</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#group-columns">Group Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The group for the successors of this operation (only in <a href="#document-chunks">document chunks</a>)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">successor actor IDs</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">129</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">8</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grouped <a href="#actor-index-columns">Actor Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The actor ID of each successor&#8217;s operation ID</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">successor counters</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">131</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">8</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grouped <a href="#_delta_column">Delta Column</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The counter of each successor&#8217;s operation ID</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+The javascript implementation includes a <code>child</code> column, is this
+required?
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>We determine the key that the operation refers to thusly:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If the key string is not null then this is the key of the operation (when modifying a <a href="#_object">map</a>).</p>
+</li>
+<li>
+<p>Otherwise we use the pair (lookup_actor(key actor ID), key counter) as the key of the operation (when modifying a <a href="#_object">list</a>).</p>
+</li>
+<li>
+<p>If key string is null and any of key actor or key counter are null implementations MUST abort</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Operations are stored with their predecessors in <a href="#change-chunks">change chunks</a> and with successors
+in <a href="#document-chunks">document chunks</a>. For more information see the section
+on <a href="#_implementation_concerns">implementation concerns</a>.</p>
+</div>
+<div class="paragraph">
+<p>After decoding all the columns, and de-referencing indices into other columns,
+you will have an array of operations, where each operation conceptually has the
+following fields:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Field</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Type</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Mapping to columns</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Object</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Object ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The object modified by this operation in (column 0)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Key</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">String or Operation ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The position in that object to modify (column 1)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operation ID</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The ID of this operation, and thus the object ID of any <a href="#_object">object</a> it creates (column 2)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Insert</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">boolean</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">For operations on <code>list</code> or <code>text</code> objects, whether to overwrite the position (when <code>false</code>) or insert before the position (when <code>true</code>)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_action">Action</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">action</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The action this operation takes</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><a href="#_value">Value</a></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">primitive value</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The value inserted by this operation (if needed)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Successors</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Operations</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Future operations that affect the object created by this operation (if any)</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_column_types">Column Types</h3>
+<div class="sect3">
+<h4 id="_run_length_encoding">Run Length Encoding</h4>
+<div class="paragraph">
+<p>Many columns use run length encoding to compress repeated values. Such columns are
+encoded as repeated pairs of the form <code>(length, value)</code>.</p>
+</div>
+<div class="paragraph">
+<p>A "run" in an RLE columns is encoded as pairs of the form <code>(length,value)</code>.
+<code>length</code> is a signed <a href="#_leb">LEB</a>:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If <code>length</code> is positive, then <code>value</code> is a single instance of the value which
+occurs <code>length</code> times.</p>
+</li>
+<li>
+<p>If <code>length</code> is 0 then this pair represents a <code>null</code> value and <code>value</code> is the
+<a href="#_uleb">uLEB</a> encoding of the number of times <code>null</code> occurs</p>
+</li>
+<li>
+<p>If <code>length</code> is negative then <code>value</code> is a literal run and the absolute value
+of <code>length</code> is the number of items in the literal run. That is to say, there
+is no compression.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>For example if you were trying to compress the array of uLEBs <code>[0,0,0,null,null,1,2,3]</code>
+you would encode it as <code>0x03 0x00 0x00 0x02 0x7d 0x01 0x02 0x03</code></p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="group-columns">Group Column</h4>
+<div class="paragraph">
+<p>Some fields in automerge have multiple values per change or operation. An
+example of this is the dependencies index of a <a href="#_change_columns">change</a>. The
+group column (denoted by column type 0) defines how many values should be read from each grouped column
+when parsing each change or operation.</p>
+</div>
+<div class="paragraph">
+<p>Grouping affects all columns with the same ID as its <a href="#_column_specification">column specification</a>,
+so a group column will usually be followed by one or more columns with the same
+id but different types. It is possible to have a group column with no matching
+grouped columns if the grouped column is completely empty, as it will be
+omitted.</p>
+</div>
+<div class="paragraph">
+<p>The group column is a <a href="#_run_length_encoding">run length encoded</a> list of 64-bit
+<a href="#_uleb">uLEB</a>s that specifies how many items should be read from the subsequent
+grouped columns per change or operation. Implementations MUST abort if they
+cannot read the correct number of values from each of the grouped columns.</p>
+</div>
+<div class="paragraph">
+<p>For example if you had five changes in a document with <code>[0,1,2,2,2]</code>
+dependencies each, the group column would be encoded as <code>0x7e 0x00 0x01 0x03
+0x02</code>, and the dependencies index column would contain seven values.</p>
+</div>
+<div class="paragraph">
+<p>Note that it is not possible for two columns in a group to have the same type as
+it would not be possible to have a deterministic ordering for the column
+specifications. Implementations MUST abort if they encounter two column
+specifications with the same type and column ID.</p>
+</div>
+<div class="paragraph">
+<p>Implementations MUST abort if they encounter multiple group column
+specifications with the same ID.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="actor-index-columns">Actor Column</h4>
+<div class="paragraph">
+<p>An actor column (denoted by column type 1) uses <a href="#_run_length_encoding">run length encoding</a> to compress a list of <a href="#_uleb">uLEB</a>s
+that represent an index into an array of actor ids.</p>
+</div>
+<div class="paragraph">
+<p>In a <a href="#document-chunks">document chunk</a> the index is the position of the actor id in the <a href="#_array_of_actor_ids">array of actor IDs</a>.</p>
+</div>
+<div class="paragraph">
+<p>In a <a href="#change-chunks">change chunk</a> index 0 represents the actor id of the change, and index 1+ are given to the
+other actor ids in the order they appear.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_uleb_column">uLEB Column</h4>
+<div class="paragraph">
+<p>A uLEB column (denoted by column type 2) uses <a href="#_run_length_encoding">run length
+encoding</a> to compress a list of 64-bit <a href="#_uleb">uLEB</a>s.</p>
+</div>
+<div class="paragraph">
+<p>It is used (instead of a <a href="#_delta_column">delta column</a>) when there is no
+expectation that delta compression would help reduce the storage requirement,
+or if the column may contain null values.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_delta_column">Delta Column</h4>
+<div class="paragraph">
+<p>A delta column (denoted by column type 3) uses <a href="#_run_length_encoding">run length
+encoding</a> to compress a list of 64-bit <a href="#_uleb">uLEB</a>s.</p>
+</div>
+<div class="paragraph">
+<p>The sequence is assumed to start from zero, so if you wanted to encode the list
+[3,4,5,6,9,7,8] you would first calculate the list of deltas
+[+3,+1,+1,+1,+3,-2,+1], and then <a href="#_run_length_encoding">run length encode</a> the resulting signed <a href="#_leb">LEB</a>s to get the bytes
+<code>0x7f 0x03 0x03 0x01 0x7d 0x03 0x7e 0x01</code>.</p>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+How should applications handle a decoded delta value which takes the
+absolute value below zero?
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_boolean_column">Boolean Column</h4>
+<div class="paragraph">
+<p>A boolean column (denoted by column type 4) encodes a list of booleans. The column contains sequences of
+64-bit <a href="#_uleb">uLEB</a> integers which represent the lengths of alternating sequences of
+<code>false/true</code>. The initial value of the column is always <code>false</code></p>
+</div>
+<div class="paragraph">
+<p>For example if you wanted to encode the list  <code>[true, true, false, false,
+false]</code>, you would end up with a list of lengths of <code>[0,2,3]</code>, which would be
+encoded as <code>0x00 0x02 0x03</code>.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_string_column">String Column</h4>
+<div class="paragraph">
+<p>A string column (denoted by column type 5) uses <a href="#_run_length_encoding">run length
+encoding</a> to compress a list of length-prefixed UTF-8 strings. Each string is
+encoded as a 64-bit <a href="#_uleb">uLEB</a> followed by that many literal bytes.</p>
+</div>
+<div class="paragraph">
+<p>For example, if you wanted to encode the list <code>["a", "", null, "boo", "boo"]</code>
+you would end up with <code>0x7e 0x01 0x65 0x00 0x00 0x01 0x02 0x03 0x66 0x6f 0x6f</code>.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="raw-value-columns">Value Metadata Column</h4>
+<div class="paragraph">
+<p>The value metadata column (denoted by column type 6) is always paired with a
+<a href="#_value_column">value column</a> with the same ID. The metadata column is a <a href="#_run_length_encoding">run length encoded</a>
+list of 64-bit <a href="#_leb">LEB</a>s that defines the type and length of each value in the
+value column.</p>
+</div>
+<div class="paragraph">
+<p>These integers are laid out like so:</p>
+</div>
+<div class="imageblock">
+<div class="content">
+<img src="raw-value-metadata-layout.svg" alt="raw value metadata layout" width="681" height="46">
+</div>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The lower four bits encode the type of the value</p>
+</li>
+<li>
+<p>The higher bits encode the length of the value</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>The type code may be</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Value</th>
+<th class="tableblock halign-left valign-top">Type</th>
+<th class="tableblock halign-left valign-top">Representation of value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">0</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Null</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Not present (length = 0)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">False</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Not present (length = 0)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">True</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Not present (length = 0)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">3</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Unsigned integer</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_uleb">uLEB</a> in value column (length = 1..10)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">4</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Signed integer</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_leb">LEB</a> in value column (length = 1..10)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">IEEE754 float</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit IEEE754 float in value column (length = 8)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">6</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">UTF8 string</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Utf-8 string in value column (length = 0..2^60)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">7</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Bytes</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Arbitrary bytes in value column (length = 0..2^60)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">8</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Counter</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_leb">LEB</a> in value column (length = 1..10)</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">9</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Timestamp</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">64-bit <a href="#_leb">LEB</a> in value column (length = 1..10)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="paragraph">
+<p>If the type tag is none of these values it may be a value produced by a future
+version of Automerge. In this case implementations MUST read and store the type
+code and <code>length</code> bytes when reading and write them back in same position when
+writing.</p>
+</div>
+<div class="paragraph">
+<p>If the bytes in a UTF8 string value (type 6) are not valid utf-8, then implementations
+should replace them by the unicode replacement character (U+FFFD).</p>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+Replacing invalid utf-8 seems like it might be a bad idea? Should check
+this. I <em>think</em> it&#8217;s what the javascript implementation does though.
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_value_column">Value Column</h4>
+<div class="paragraph">
+<p>The value column (denoted by column type 7) contains raw <a href="#_value">values</a>. The
+type and length of each value in the column is determined by the <a href="#raw-value-columns">value metadata column</a>
+with the same column ID.</p>
+</div>
+<div class="paragraph">
+<p>Note that raw value columns which do not contain values may be omitted. If
+implementations encounter a lone value metadata column they must assume that it
+is accompanied by an empty raw value column.</p>
+</div>
+<div class="paragraph">
+<p>Implementations must abort if they encounter  a raw value column not preceeded
+by a metadata column with the same id. Implementations must also abort if they
+encounter more than one metadata column with the same column id, or more than
+one raw value column with the same id.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="unknown-columns">Unknown columns</h4>
+<div class="paragraph">
+<p>When reading the column metadata applications may encounter column
+specifications which they are not expecting. These column specifications may be
+produced by future versions of the application. If an implementation encounters
+an unknown column whilst reading data it MUST retain this data when writing that
+data back to storage.</p>
+</div>
+<div class="paragraph">
+<p>This is possible because every column type has some concept of a null value.
+When inserting new rows into a collection of rows stored in the columnar storage
+format application MUST write a null value into columns which they do not
+recognise for the new rows they are inserting.</p>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+What should the null value be for boolean or delta columns?
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_implementation_concerns">Implementation concerns</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Below are some notes that may help implementors build compatible automerge
+implementations. They are likely not yet complete, and any differences between
+what is written here and the <a href="https://github.com/Automerge/Automerge-rs">reference implementation</a>
+should be resolved in favor of that.</p>
+</div>
+<div class="sect2">
+<h3 id="_operations_in_document_chunks">Operations in document chunks</h3>
+<div class="sect3">
+<h4 id="_ordering_of_operations">Ordering of operations</h4>
+<div class="paragraph">
+<p>Operations are grouped by the object that they manipulate. Objects are then
+sorted by their IDs. Thus operations are ordered using the following procedure:</p>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+Is this required? If so should implementations abort if the operations
+are not inthis order?
+</td>
+</tr>
+</table>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>First sort by object ID, such that any operations for the same object are
+consecutive. The null objectId (i.e. the root object) is sorted before all
+non-null objectIds. Non-null objectIds are sorted by <a href="#_lamport_timestamps">Lamport timestamp</a>.</p>
+</li>
+<li>
+<p>For each object:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>if the object is a map, sort the operations within that object
+lexicographically by key, so that all operations for the same key are
+consecutive. This sort order MUST be based on the UTF-8 byte sequence of the
+key.</p>
+</li>
+<li>
+<p>If the object is a list or text, sort the operations within that object by the
+operation ID of the element they target. This is determined as follows:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>For insert operations the target element is the operation ID of the
+inserting operation</p>
+</li>
+<li>
+<p>For <code>set</code> or <code>delete</code> operations the target is the operation ID in the <code>key</code>
+field</p>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<p>Among the operations for the same key (for maps) or the same list element (for
+lists/text), sort the operations by their opId, using <a href="#_lamport_timestamps">lamport timestamp</a> ordering. For list elements, note that the operation that
+inserted the operation will always have an opId that is lower than the opId of
+any operations that updates or deletes that list element, and therefore the
+insertion operation will always be the first operation for a given list
+element.</p>
+</li>
+</ul>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Warning</div>
+</td>
+<td class="content">
+the JavaScript implementation currently does not do this sorting
+correctly, since it sorts keys by JavaScript string comparison, which differs
+from UTF-8 lexicographic ordering for characters beyond the basic multilingual
+plane.
+</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_successors_and_omitting_deletes">Successors and omitting deletes</h4>
+<div class="paragraph">
+<p>The document storage format does not encode a predecessors field. Instead this
+information is encoded in the <code>successors</code> field. This can be used to
+reconstruct the predecessors field from the reference data model.</p>
+</div>
+<div class="paragraph">
+<p>Delete operations do not carry any information other than the object ID and key
+they are deleting. As such they are encoded in the document by appending the
+operation ID of the delete operation to the successors of the operation creating
+the data to be deleted.</p>
+</div>
+<div class="paragraph">
+<p>Implementations MUST abort if they encounter explicitly encoded delete
+operations in a document chunk.</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_calculating_predecessors">Calculating predecessors</h4>
+<div class="paragraph">
+<p>Operations in the document format are not stored in the order they were
+generated, as they are in the change data model. Furthermore, operations in the
+document format have a <code>successor</code> rather than <code>predecessor</code> field. The
+following procedure specifies how to map from document operations to the change
+operations.</p>
+</div>
+<div class="paragraph">
+<p>First expand operations:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Add an empty predecessor list to every document operation</p>
+</li>
+<li>
+<p>For each operation in the document operation rows</p>
+<div class="ulist">
+<ul>
+<li>
+<p>For each operation ID in the successors list of the document operation lookup
+the target operation in the document operations:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>If an operation is found add the current operation ID to the
+target operations predecessor list</p>
+</li>
+<li>
+<p>If no operation is found then insert a new delete operation into the
+document with its ID set to the target operation ID, the object and key
+set to the same value as the current operation, and the predecessor set to
+the current operation.</p>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Second, match up changes:</p>
+</div>
+<div class="paragraph">
+<p>For each document operation</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Sort all the changes for the same actor as the operation ID by ascending
+<code>maxOp</code></p>
+</li>
+<li>
+<p>Add the document operation to the first change which has <code>maxOp &gt;= counter</code>
+where <code>counter</code> is the counter component of the operation ID.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Implementations MUST abort if no matching change is found</p>
+</div>
+<div class="paragraph">
+<p>For each change sort the operations within the change by
+<a href="#_lamport_timestamps">lamport timestamp</a> of the operation ID.</p>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_lamport_timestamps">Lamport Timestamps</h3>
+<div class="paragraph">
+<p>Operation IDs are lamport timestamps. This imposes a total ordering. To compare two lamport timestamps:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If the counter components are different then whichever timestamp has the larger counter is the larger</p>
+</li>
+<li>
+<p>If the counter components are the same but the actor IDs are different then the actor ID which is lexicographically larger is considered the larger timestamp</p>
+</li>
+<li>
+<p>Otherwise the two timestamps are equal</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_hash_verification">Hash verification</h3>
+<div class="paragraph">
+<p>The dependencies in the document model are expressed as integer offsets. But in
+the reference data model dependencies are expressed as a hash of the ancestor
+changes. To map to the hash based representation perform a topological traversal
+of the dependency graph and for each change serialize the change as a <a href="#change-chunks">Change Chunk</a>
+then calculate the hash of the change as in the <a href="#_change_hash">Change Hash</a>, then for every
+change replace the index of the current change with the calculated hash.</p>
+</div>
+<div class="paragraph">
+<p>Once this procedure is complete take the heads of the depedency graph and
+compare their hashes with the head hashes field in the document chunk. If the
+hashes don&#8217;t match implementations MUST abort.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="_references">References</h2>
+<div class="sectionbody">
+<div class="ulist bibliography">
+<ul class="bibliography">
+<li>
+<p><a id="RFC2119"></a>[RFC2119]: <a href="https://datatracker.ietf.org/doc/html/rfc2119" class="bare">https://datatracker.ietf.org/doc/html/rfc2119</a></p>
+</li>
+<li>
+<p><a id="RFC8174"></a>[RFC8174]: <a href="https://datatracker.ietf.org/doc/html/rfc8174" class="bare">https://datatracker.ietf.org/doc/html/rfc8174</a></p>
+</li>
+<li>
+<p><a id="DEFLATE"></a>[DEFLATE]: <a href="https://datatracker.ietf.org/doc/html/rfc1951" class="bare">https://datatracker.ietf.org/doc/html/rfc1951</a></p>
+</li>
+<li>
+<p><a id="SHA256"></a>[SHA256]: <a href="https://datatracker.ietf.org/doc/html/rfc4634" class="bare">https://datatracker.ietf.org/doc/html/rfc4634</a></p>
+</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Last updated 2023-02-07 10:06:13 UTC
+</div>
+</div>
+</body>
+</html>
