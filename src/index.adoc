@@ -168,7 +168,7 @@ The chunk type is either:
 | Value | Type | Description
 | `0x00` | <<Document Chunk,Document chunk>> | Contains a graph of related changes
 | `0x01` | <<Change Chunk,Change chunk>> | Contains a single change and its operations
-| `0x02` | <<Compressed Chunk,Compressed chunk>> | Either a Document chunk or Change chunk that has been DEFLATE compressed
+| `0x02` | <<Compressed Change Chunk,Compressed change chunk>> | Contains a single change deflate compressed
 |===
 
 [#document-chunks]
@@ -243,12 +243,22 @@ collaborate with new clients without limiting which features the new clients can
 use.
 
 [#compressed-chunks]
-==== Compressed Chunk
+==== Compressed Change Chunk
 
-Compressed chunks must be decompressed using <<DEFLATE>>. The decompressed chunk
-should be either a <<Document Chunk>> or <<Change Chunk>>. Implementations
-SHOULD raise an error if the contents of a compressed chunk is another
-compressed chunk.
+A compressed change chunk is a change chunk where the contents have been
+compressed using <<DEFLATE>>. The checksum of a compressed chunk is calculated
+as through the chunk was not compressed (with type = 1, the length of the
+uncompressed data, and the original uncompressed data).
+
+For example if you have a change which has 372 bytes of data (excluding the header) which compresses to 323 bytes.
+If the original change chunk header consisted of the following bytes:
+`0x85 0x6f 0x4a 0x83 0x80 0xb7 0x5d 0x54 0x01 0xf4 0x02`,
+the compressed change chunk header would consist of:
+`0x85 0x6f 0x4a 0x83 0x80 0xb7 0x5d 0x54 0x02 0xc3 0x02`
+
+To decode a compressed change chunk first decompress the chunk contents, and
+then construct a new chunk with the same magic bytes and checksum, but with type
+= 1 and the length of the decompressed data. Then parse that as a change chunk.
 
 === Simple types
 
